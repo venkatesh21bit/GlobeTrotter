@@ -10,7 +10,8 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio",
-    "seed": "ts-node src/scripts/seedCitiesAndActivities.ts"
+    "seed": "ts-node src/scripts/seedCitiesAndActivities.ts",
+    "seed:user": "ts-node src/scripts/seedUserTrips.ts"
   },
   "keywords": [
     "travel",

@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
+import { authApi } from "@/lib/api"
 import { useToast } from "@/hooks/use-toast"
 
 export default function SignupPage() {
@@ -24,15 +25,22 @@ export default function SignupPage() {
     e.preventDefault()
     setIsLoading(true)
 
-    // Simulate API call
-    setTimeout(() => {
-      setIsLoading(false)
+    try {
+      const response = await authApi.register({ name, email, password })
       toast({
         title: "Account created!",
-        description: "Welcome to GlobalTrotters. Please login to continue.",
+        description: `Welcome to GlobalTrotters, ${response.user.name}!`,
       })
-      router.push("/login")
-    }, 1500)
+      // Use hard redirect for authentication
+      window.location.href = "/dashboard"
+    } catch (error: any) {
+      toast({
+        title: "Registration failed",
+        description: error.message || "Could not create account. Please try again.",
+        variant: "destructive",
+      })
+      setIsLoading(false)
+    }
   }
 
   return (

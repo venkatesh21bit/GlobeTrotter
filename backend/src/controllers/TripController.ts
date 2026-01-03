@@ -248,8 +248,19 @@ class TripController {
         return;
       }
 
-      const tripActivity = await prisma.tripActivity.create({
-        data: {
+      // Use upsert to handle duplicate activities (update if exists, create if not)
+      const tripActivity = await prisma.tripActivity.upsert({
+        where: {
+          tripId_activityId: {
+            tripId,
+            activityId,
+          },
+        },
+        update: {
+          date: date ? new Date(date) : null,
+          notes,
+        },
+        create: {
           tripId,
           activityId,
           date: date ? new Date(date) : null,

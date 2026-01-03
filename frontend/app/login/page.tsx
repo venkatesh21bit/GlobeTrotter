@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
-import { loginUser } from "@/lib/auth/mock-auth"
+import { authApi } from "@/lib/api"
 import { useToast } from "@/hooks/use-toast"
 
 export default function LoginPage() {
@@ -25,27 +25,19 @@ export default function LoginPage() {
     setIsLoading(true)
 
     try {
-      const user = await loginUser(email, password)
-      if (user) {
-        toast({
-          title: "Welcome back!",
-          description: `Successfully logged in as ${user.name}`,
-        })
-        router.push("/dashboard")
-      } else {
-        toast({
-          title: "Login failed",
-          description: "Invalid email or password. Try demo@globaltrotters.com",
-          variant: "destructive",
-        })
-      }
-    } catch (error) {
+      const response = await authApi.login({ email, password })
       toast({
-        title: "Error",
-        description: "An unexpected error occurred.",
+        title: "Welcome back!",
+        description: `Successfully logged in as ${response.user.name}`,
+      })
+      // Use hard redirect for authentication
+      window.location.href = "/dashboard"
+    } catch (error: any) {
+      toast({
+        title: "Login failed",
+        description: error.message || "Invalid email or password",
         variant: "destructive",
       })
-    } finally {
       setIsLoading(false)
     }
   }
@@ -90,7 +82,7 @@ export default function LoginPage() {
                   <Input
                     id="email"
                     type="email"
-                    placeholder="demo@globaltrotters.com"
+                    placeholder="your@email.com"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     required
@@ -99,7 +91,7 @@ export default function LoginPage() {
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <Label htmlFor="password">Password</Label>
-                    <Link href="#" className="text-sm font-medium text-primary hover:underline">
+                    <Link href="/forgot-password" className="text-sm font-medium text-primary hover:underline">
                       Forgot password?
                     </Link>
                   </div>
@@ -137,3 +129,4 @@ export default function LoginPage() {
     </div>
   )
 }
+

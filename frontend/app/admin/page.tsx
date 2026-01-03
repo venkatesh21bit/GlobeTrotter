@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
 import {
   Users,
   Plane,
@@ -20,32 +21,58 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Navbar } from "@/components/navbar"
+import { adminApi } from "@/lib/api"
+import { getCurrentUser } from "@/lib/data/queries"
+import { useToast } from "@/hooks/use-toast"
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts"
-
-const analyticsData = [
-  { month: "Jan", users: 1200, trips: 450 },
-  { month: "Feb", users: 1900, trips: 620 },
-  { month: "Mar", users: 2400, trips: 890 },
-  { month: "Apr", users: 2100, trips: 750 },
-  { month: "May", users: 2800, trips: 1100 },
-  { month: "Jun", users: 3500, trips: 1450 },
-]
-
-const topDestinations = [
-  { city: "Paris", trips: 245, growth: 12 },
-  { city: "Tokyo", trips: 189, growth: 24 },
-  { city: "Barcelona", trips: 156, growth: -5 },
-  { city: "New York", trips: 134, growth: 8 },
-  { city: "London", trips: 122, growth: 15 },
-]
 
 export default function AdminDashboardPage() {
   const [isLoading, setIsLoading] = useState(true)
+  const [stats, setStats] = useState<any>(null)
+  const [users, setUsers] = useState<any[]>([])
+  const router = useRouter()
+  const { toast } = useToast()
 
   useEffect(() => {
-    const timer = setTimeout(() => setIsLoading(false), 1000)
-    return () => clearTimeout(timer)
-  }, [])
+    const fetchAdminData = async () => {
+      try {
+        const currentUser = await getCurrentUser()
+        if (!currentUser) {
+          router.push("/login")
+          return
+        }
+
+        // Check if user is admin (you can add role check here)
+        if (currentUser.role !== 'ADMIN') {
+          toast({
+            title: "Access Denied",
+            description: "You don't have permission to access this page.",
+            variant: "destructive",
+          })
+          router.push("/dashboard")
+          return
+        }
+
+        const [statsData, usersData] = await Promise.all([
+          adminApi.getStats().catch(() => null),
+          adminApi.getUsers({ limit: 10 }).catch(() => ({ users: [], total: 0, page: 1, limit: 10 }))
+        ])
+
+        setStats(statsData)
+        setUsers(usersData.users)
+      } catch (error) {
+        toast({
+          title: "Error",
+          description: "Failed to load admin data.",
+          variant: "destructive",
+        })
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    fetchAdminData()
+  }, [router, toast])
 
   if (isLoading) {
     return (
@@ -76,11 +103,11 @@ export default function AdminDashboardPage() {
 
           {/* Key Metrics */}
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-            {[
-              { label: "Total Users", value: "12,450", change: "+14%", icon: Users, trend: "up" },
-              { label: "Active Trips", value: "3,890", change: "+8%", icon: Plane, trend: "up" },
-              { label: "Global Stops", value: "15,670", change: "-2%", icon: MapPin, trend: "down" },
-              { label: "Avg. Budget", value: "$4,200", change: "+22%", icon: DollarSign, trend: "up" },
+            {stats ? [
+              { label: "Total Users", value: stats.totalUsers?.toLocaleString() || "0", change: stats.userGrowth || "0%", icon: Users, trend: "up" },
+              { label: "Active Trips", value: stats.totalTrips?.toLocaleString() || "0", change: stats.tripGrowth || "0%", icon: Plane, trend: "up" },
+              { label: "Total Cities", value: stats.totalCities?.toLocaleString() || "0", change: stats.cityGrowth || "0%", icon: MapPin, trend: "up" },
+              { label: "Total Activities", value: stats.totalActivities?.toLocaleString() || "0", change: stats.activityGrowth || "0%", icon: DollarSign, trend: "up" },
             ].map((stat, i) => (
               <Card key={stat.label} className="border-none shadow-sm overflow-hidden">
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 p-6">
@@ -104,7 +131,7 @@ export default function AdminDashboardPage() {
                   </div>
                 </CardContent>
               </Card>
-            ))}
+            )) : null}
           </div>
 
           <div className="grid gap-8 lg:grid-cols-12">
@@ -133,8 +160,9 @@ export default function AdminDashboardPage() {
               </CardHeader>
               <CardContent className="p-6 pt-0">
                 <div className="h-[350px] w-full mt-4">
+                  {stats?.chartData && stats.chartData.length > 0 ? (
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={analyticsData}>
+                    <BarChart data={stats.chartData}>
                       <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
                       <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: "#888" }} />
                       <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: "#888" }} />
@@ -149,6 +177,11 @@ export default function AdminDashboardPage() {
                       <Bar dataKey="trips" fill="hsl(var(--secondary))" radius={[4, 4, 0, 0]} name="Trips" />
                     </BarChart>
                   </ResponsiveContainer>
+                  ) : (
+                    <div className="flex items-center justify-center h-full text-muted-foreground">
+                      No analytics data available
+                    </div>
+                  )}
                 </div>
               </CardContent>
               <CardFooter className="p-6 border-t bg-muted/10 flex justify-between items-center">
@@ -179,28 +212,36 @@ export default function AdminDashboardPage() {
                 </CardHeader>
                 <CardContent className="p-0">
                   <div className="divide-y">
-                    {topDestinations.map((dest) => (
-                      <div
-                        key={dest.city}
-                        className="flex items-center justify-between p-4 hover:bg-muted/30 transition-colors"
-                      >
-                        <div className="flex items-center gap-3">
-                          <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center">
-                            <MapPin className="h-4 w-4 text-primary" />
+                    {stats?.topDestinations && stats.topDestinations.length > 0 ? (
+                      stats.topDestinations.map((dest: any) => (
+                        <div
+                          key={dest.city || dest.name}
+                          className="flex items-center justify-between p-4 hover:bg-muted/30 transition-colors"
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center">
+                              <MapPin className="h-4 w-4 text-primary" />
+                            </div>
+                            <span className="font-bold text-sm">{dest.city || dest.name}</span>
                           </div>
-                          <span className="font-bold text-sm">{dest.city}</span>
-                        </div>
-                        <div className="text-right">
-                          <div className="text-xs font-bold">{dest.trips} trips</div>
-                          <div
-                            className={`text-[10px] font-bold ${dest.growth > 0 ? "text-green-600" : "text-destructive"}`}
-                          >
-                            {dest.growth > 0 ? "+" : ""}
-                            {dest.growth}%
+                          <div className="text-right">
+                            <div className="text-xs font-bold">{dest.trips || dest.count || 0} trips</div>
+                            {dest.growth !== undefined && (
+                              <div
+                                className={`text-[10px] font-bold ${dest.growth > 0 ? "text-green-600" : "text-destructive"}`}
+                              >
+                                {dest.growth > 0 ? "+" : ""}
+                                {dest.growth}%
+                              </div>
+                            )}
                           </div>
                         </div>
+                      ))
+                    ) : (
+                      <div className="p-8 text-center text-muted-foreground text-sm">
+                        No destination data available
                       </div>
-                    ))}
+                    )}
                   </div>
                 </CardContent>
                 <CardFooter className="p-4 border-t">
@@ -262,45 +303,46 @@ export default function AdminDashboardPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {[
-                    { name: "John Doe", email: "john@example.com", plan: "Pro", trips: 12, status: "Active" },
-                    { name: "Sarah Smith", email: "sarah@example.com", plan: "Free", trips: 2, status: "Inactive" },
-                    { name: "Alex Johnson", email: "alex@example.com", plan: "Pro", trips: 24, status: "Active" },
-                    { name: "Emily Brown", email: "emily@example.com", plan: "Pro", trips: 8, status: "Active" },
-                  ].map((user) => (
-                    <TableRow key={user.email} className="hover:bg-muted/10">
-                      <TableCell>
-                        <div className="flex items-center gap-3">
-                          <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center font-bold text-xs text-primary">
-                            {user.name.charAt(0)}
+                  {users && users.length > 0 ? (
+                    users.map((user) => (
+                      <TableRow key={user.id} className="hover:bg-muted/10">
+                        <TableCell>
+                          <div className="flex items-center gap-3">
+                            <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center font-bold text-xs text-primary">
+                              {user.name?.charAt(0) || 'U'}
+                            </div>
+                            <div>
+                              <div className="font-bold text-sm">{user.name}</div>
+                              <div className="text-[10px] text-muted-foreground">{user.email}</div>
+                            </div>
                           </div>
-                          <div>
-                            <div className="font-bold text-sm">{user.name}</div>
-                            <div className="text-[10px] text-muted-foreground">{user.email}</div>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant={user.role === "ADMIN" ? "default" : "secondary"} className="text-[10px] h-5">
+                            {user.role || "USER"}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="font-medium text-sm">{user._count?.trips || 0}</TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <div className="h-1.5 w-1.5 rounded-full bg-green-500" />
+                            <span className="text-xs">Active</span>
                           </div>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={user.plan === "Pro" ? "default" : "secondary"} className="text-[10px] h-5">
-                          {user.plan}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="font-medium text-sm">{user.trips}</TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          <div
-                            className={`h-1.5 w-1.5 rounded-full ${user.status === "Active" ? "bg-green-500" : "bg-muted-foreground"}`}
-                          />
-                          <span className="text-xs">{user.status}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Button variant="ghost" size="icon" className="h-8 w-8">
-                          <MoreVertical className="h-4 w-4" />
-                        </Button>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Button variant="ghost" size="icon" className="h-8 w-8">
+                            <MoreVertical className="h-4 w-4" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  ) : (
+                    <TableRow>
+                      <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                        No user data available
                       </TableCell>
                     </TableRow>
-                  ))}
+                  )}
                 </TableBody>
               </Table>
             </CardContent>

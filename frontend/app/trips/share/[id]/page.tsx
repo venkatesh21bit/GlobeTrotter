@@ -7,31 +7,56 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Navbar } from "@/components/navbar"
-import { getTripWithDetails } from "@/lib/data/queries"
+import { tripsApi } from "@/lib/api"
 import { useToast } from "@/hooks/use-toast"
-import type { TripWithDetails } from "@/lib/types/database"
+
+interface Trip {
+  id: string
+  name: string
+  description?: string
+  isPublic?: boolean
+  startDate?: string
+  endDate?: string
+  destinations?: string[]
+  coverImageUrl?: string
+  tripActivities?: any[]
+  budget?: number
+}
 
 export default function PublicTripViewPage() {
   const { id } = useParams() as { id: string }
-  const [trip, setTrip] = useState<TripWithDetails | null>(null)
+  const [trip, setTrip] = useState<Trip | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const router = useRouter()
   const { toast } = useToast()
 
   useEffect(() => {
     const fetchTrip = async () => {
-      const data = await getTripWithDetails(id)
-      if (!data || !data.isPublic) {
+      try {
+        const response = await tripsApi.getById(id)
+        // API returns { trip: {...} } so extract the trip
+        const data = response.trip || response
+        if (!data || !data.isPublic) {
+          toast({
+            title: "Access Denied",
+            description: "This itinerary is private or does not exist.",
+            variant: "destructive",
+          })
+          router.push("/explore")
+          return
+        }
+        setTrip(data)
+      } catch (error) {
+        console.error('Failed to fetch shared trip:', error)
         toast({
-          title: "Access Denied",
-          description: "This itinerary is private or does not exist.",
+          title: "Error",
+          description: "Failed to load trip.",
           variant: "destructive",
         })
-        router.push("/")
-        return
+        router.push("/explore")
+      } finally {
+        setIsLoading(false)
       }
-      setTrip(data)
-      setIsLoading(false)
     }
 
     fetchTrip()
@@ -69,47 +94,55 @@ export default function PublicTripViewPage() {
       <main className="container py-12 px-4 md:px-6">
         <div className="grid gap-8 lg:grid-cols-12">
           <div className="lg:col-span-8 space-y-12">
-            {trip.stops.map((stop, index) => (
-              <section key={stop.id} className="relative pl-8 md:pl-12">
-                <div className="absolute left-1.5 md:left-3.5 top-0 w-6 h-6 rounded-full bg-primary flex items-center justify-center text-white text-[10px] font-bold shadow-lg z-10">
-                  {index + 1}
-                </div>
-                {index < trip.stops.length - 1 && (
-                  <div className="absolute left-4 md:left-6 top-10 bottom-[-48px] w-0.5 bg-border border-dashed border-l-2" />
-                )}
-
-                <div className="space-y-6">
-                  <div>
-                    <h2 className="text-3xl font-bold font-serif">{stop.city.name}</h2>
-                    <p className="text-muted-foreground">
-                      {stop.city.country} • {new Date(stop.arrivalDate).toLocaleDateString()} -{" "}
-                      {new Date(stop.departureDate).toLocaleDateString()}
-                    </p>
+            {trip.destinations && trip.destinations.map((destination: string, index: number) => {
+              const cityActivities = trip.tripActivities?.filter((ta: any) => 
+                ta.activity.city.name === destination
+              ) || []
+              
+              return (
+                <section key={index} className="relative pl-8 md:pl-12">
+                  <div className="absolute left-1.5 md:left-3.5 top-0 w-6 h-6 rounded-full bg-primary flex items-center justify-center text-white text-[10px] font-bold shadow-lg z-10">
+                    {index + 1}
                   </div>
+                  {trip.destinations && index < trip.destinations.length - 1 && (
+                    <div className="absolute left-4 md:left-6 top-10 bottom-[-48px] w-0.5 bg-border border-dashed border-l-2" />
+                  )}
 
-                  <div className="grid gap-4">
-                    {stop.activities.map((ta) => (
-                      <Card key={ta.id} className="border-none shadow-sm">
-                        <CardContent className="p-4 flex gap-4">
-                          <img
-                            src={ta.activity.imageUrl || "/placeholder.svg"}
-                            alt={ta.activity.name}
-                            className="w-20 h-20 rounded-lg object-cover"
-                          />
-                          <div>
-                            <h4 className="font-bold">{ta.activity.name}</h4>
-                            <p className="text-sm text-muted-foreground line-clamp-1">{ta.activity.description}</p>
-                            <Badge variant="outline" className="mt-2 text-[10px]">
-                              {ta.activity.category}
-                            </Badge>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    ))}
+                  <div className="space-y-6">
+                    <div>
+                      <h2 className="text-3xl font-bold font-serif">{destination}</h2>
+                      <p className="text-muted-foreground">
+                        {cityActivities.length} {cityActivities.length === 1 ? 'activity' : 'activities'} planned
+                      </p>
+                    </div>
+
+                    <div className="grid gap-4">
+                      {cityActivities.map((ta: any) => (
+                        <Card key={ta.id} className="border-none shadow-sm">
+                          <CardContent className="p-4 flex gap-4">
+                            <img
+                              src={ta.activity.imageUrl || "/placeholder.svg"}
+                              alt={ta.activity.name}
+                              className="w-20 h-20 rounded-lg object-cover"
+                            />
+                            <div>
+                              <h4 className="font-bold">{ta.activity.name}</h4>
+                              <p className="text-sm text-muted-foreground line-clamp-1">{ta.activity.description}</p>
+                              <Badge variant="outline" className="mt-2 text-[10px]">
+                                {ta.activity.category}
+                              </Badge>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      ))}
+                      {cityActivities.length === 0 && (
+                        <p className="text-sm text-muted-foreground italic">No activities planned yet</p>
+                      )}
+                    </div>
                   </div>
-                </div>
-              </section>
-            ))}
+                </section>
+              )
+            })}
           </div>
 
           <aside className="lg:col-span-4 space-y-6">

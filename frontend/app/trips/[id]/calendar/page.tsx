@@ -6,14 +6,14 @@ import { CalendarIcon, ArrowLeft, ChevronLeft, ChevronRight, Loader2, Plus, Cloc
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Navbar } from "@/components/navbar"
-import { getTripWithDetails } from "@/lib/data/queries"
+import { tripsApi } from "@/lib/api"
 import { useToast } from "@/hooks/use-toast"
 import { Badge } from "@/components/ui/badge"
-import type { TripWithDetails, TripActivity } from "@/lib/types/database"
+import type { Trip, TripActivity } from "@/lib/types/database"
 
 export default function TripCalendarPage() {
   const { id } = useParams() as { id: string }
-  const [trip, setTrip] = useState<TripWithDetails | null>(null)
+  const [trip, setTrip] = useState<Trip | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [currentDate, setCurrentDate] = useState(new Date())
   const router = useRouter()
@@ -21,48 +21,78 @@ export default function TripCalendarPage() {
 
   useEffect(() => {
     const fetchTrip = async () => {
-      const data = await getTripWithDetails(id)
-      if (!data) {
+      try {
+        const response = await tripsApi.getById(id)
+        // API returns { trip: {...} } so extract the trip
+        const data = response.trip || response
+        if (!data) {
+          toast({
+            title: "Trip not found",
+            variant: "destructive",
+          })
+          router.push("/dashboard")
+          return
+        }
+        console.log('🔥 Trip data loaded:', {
+          name: data.name,
+          startDate: data.startDate,
+          endDate: data.endDate,
+          activitiesCount: data.tripActivities?.length || 0,
+          activities: data.tripActivities?.map((ta: any) => ({
+            name: ta.activity.name,
+            date: ta.date
+          }))
+        })
+        setTrip(data)
+        // Set current date to trip start date if available
+        if (data.startDate) {
+          const tripStartDate = new Date(data.startDate)
+          console.log('📅 Setting calendar to:', tripStartDate.toLocaleDateString(), tripStartDate.getMonth(), tripStartDate.getFullYear())
+          setCurrentDate(tripStartDate)
+        }
+      } catch (error) {
+        console.error('Failed to fetch trip:', error)
         toast({
-          title: "Trip not found",
+          title: "Error loading trip",
           variant: "destructive",
         })
         router.push("/dashboard")
-        return
+      } finally {
+        setIsLoading(false)
       }
-      setTrip(data)
-      setCurrentDate(new Date(data.startDate))
-      setIsLoading(false)
     }
 
     fetchTrip()
   }, [id, router, toast])
 
   const getActivitiesForDate = (date: Date): TripActivity[] => {
-    if (!trip) return []
-    const activities: TripActivity[] = []
-    const dateStr = date.toISOString().split("T")[0]
+    if (!trip || !trip.tripActivities) return []
+    
+    const compareDate = new Date(date)
+    compareDate.setHours(0, 0, 0, 0)
 
-    trip.stops.forEach((stop) => {
-      const stopStart = new Date(stop.arrivalDate)
-      const stopEnd = new Date(stop.departureDate)
-
-      if (date >= stopStart && date <= stopEnd) {
-        stop.activities.forEach((activity) => {
-          // In a real app, activities would have specific dates
-          // Here we'll just check if they belong to this stop's time range
-          // For the sake of the calendar mock, we'll assign them to specific days
-          activities.push(activity)
+    const filtered = trip.tripActivities.filter((ta) => {
+      const activityDate = new Date(ta.date)
+      activityDate.setHours(0, 0, 0, 0)
+      const matches = activityDate.getTime() === compareDate.getTime()
+      if (matches) {
+        console.log('✅ Activity matches date:', {
+          activity: ta.activity.name,
+          date: activityDate.toDateString(),
+          compareDate: compareDate.toDateString()
         })
       }
+      return matches
     })
-
-    return activities
+    
+    return filtered
   }
 
   const renderCalendar = () => {
+    console.log('🗓️ Rendering calendar for:', currentDate.toLocaleDateString(), 'Month:', currentDate.getMonth(), 'Year:', currentDate.getFullYear())
     const daysInMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0).getDate()
     const firstDayOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1).getDay()
+    console.log('📊 Days in month:', daysInMonth, 'First day:', firstDayOfMonth)
     const days = []
 
     // Previous month days
@@ -74,8 +104,23 @@ export default function TripCalendarPage() {
     for (let day = 1; day <= daysInMonth; day++) {
       const date = new Date(currentDate.getFullYear(), currentDate.getMonth(), day)
       const isToday = new Date().toDateString() === date.toDateString()
-      const isTripDay = trip && date >= new Date(trip.startDate) && date <= new Date(trip.endDate)
+      
+      let isTripDay = false
+      if (trip && trip.startDate && trip.endDate) {
+        const tripStart = new Date(trip.startDate)
+        const tripEnd = new Date(trip.endDate)
+        tripStart.setHours(0, 0, 0, 0)
+        tripEnd.setHours(0, 0, 0, 0)
+        const checkDate = new Date(date)
+        checkDate.setHours(0, 0, 0, 0)
+        isTripDay = checkDate >= tripStart && checkDate <= tripEnd
+      }
+      
       const activities = getActivitiesForDate(date)
+      
+      if (activities.length > 0) {
+        console.log(`📍 Date ${date.toDateString()} has ${activities.length} activities:`, activities.map(a => a.activity.name))
+      }
 
       days.push(
         <div
@@ -191,10 +236,11 @@ export default function TripCalendarPage() {
                 <CardHeader>
                   <CardTitle className="text-lg">Daily Schedule</CardTitle>
                   <CardDescription>
-                    {currentDate.toLocaleDateString(undefined, {
+                    {new Date(currentDate).toLocaleDateString("en-US", {
                       weekday: "long",
                       month: "long",
                       day: "numeric",
+                      year: "numeric",
                     })}
                   </CardDescription>
                 </CardHeader>
@@ -210,8 +256,14 @@ export default function TripCalendarPage() {
                             {ta.activity.name}
                           </h4>
                           <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">
-                            {ta.scheduledTime || "Flexible"} • {ta.activity.duration}h
+                            {ta.activity.duration ? `${ta.activity.duration} min` : "Flexible"}
                           </p>
+                          {ta.activity.description && (
+                            <p className="text-xs text-muted-foreground">{ta.activity.description}</p>
+                          )}
+                          {ta.activity.category && (
+                            <Badge variant="secondary" className="text-xs">{ta.activity.category}</Badge>
+                          )}
                         </div>
                       </div>
                     ))

@@ -12,8 +12,8 @@ import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent, CardFooter } from "@/components/ui/card"
 import { Switch } from "@/components/ui/switch"
 import { Navbar } from "@/components/navbar"
-import { getCurrentUser } from "@/lib/auth/mock-auth"
-import { createTrip } from "@/lib/data/queries"
+import { getCurrentUser } from "@/lib/data/queries"
+import { tripsApi } from "@/lib/api"
 import { useToast } from "@/hooks/use-toast"
 
 export default function CreateTripPage() {
@@ -21,21 +21,24 @@ export default function CreateTripPage() {
   const [description, setDescription] = useState("")
   const [startDate, setStartDate] = useState("")
   const [endDate, setEndDate] = useState("")
-  const [isPublic, setIsPublic] = useState(false)
+  const [budget, setBudget] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
   const router = useRouter()
   const { toast } = useToast()
 
   useEffect(() => {
-    const user = getCurrentUser()
-    if (!user) {
-      router.push("/login")
+    const checkAuth = async () => {
+      const user = await getCurrentUser()
+      if (!user) {
+        router.push("/login")
+      }
     }
+    checkAuth()
   }, [router])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    const user = getCurrentUser()
+    const user = await getCurrentUser()
     if (!user) return
 
     if (new Date(startDate) > new Date(endDate)) {
@@ -49,13 +52,13 @@ export default function CreateTripPage() {
 
     setIsSubmitting(true)
     try {
-      const trip = await createTrip(user.id, {
+      const trip = await tripsApi.create({
         name,
         description,
         startDate,
         endDate,
-        isPublic,
-        coverImageUrl: "/luxury-travel-landscape.jpg",
+        budget: budget ? parseFloat(budget) : undefined,
+        status: 'planning',
       })
 
       toast({
@@ -64,10 +67,10 @@ export default function CreateTripPage() {
       })
 
       router.push(`/trips/${trip.id}`)
-    } catch (error) {
+    } catch (error: any) {
       toast({
         title: "Error",
-        description: "Failed to create trip. Please try again.",
+        description: error.message || "Failed to create trip. Please try again.",
         variant: "destructive",
       })
     } finally {
@@ -78,15 +81,16 @@ export default function CreateTripPage() {
   return (
     <div className="flex min-h-screen flex-col bg-muted/30">
       <Navbar />
-      <main className="flex-1 container max-w-3xl py-12 px-4 md:px-6">
-        <Button variant="ghost" className="mb-6 -ml-2 text-muted-foreground hover:text-primary" asChild>
-          <button onClick={() => router.back()}>
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Back to Dashboard
-          </button>
-        </Button>
+      <main className="flex-1 flex items-center justify-center py-12 px-4 md:px-6">
+        <div className="w-full max-w-3xl">
+          <Button variant="ghost" className="mb-6 -ml-2 text-muted-foreground hover:text-primary" asChild>
+            <button onClick={() => router.back()}>
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Back to Dashboard
+            </button>
+          </Button>
 
-        <Card className="border-none shadow-xl bg-background overflow-hidden">
+          <Card className="border-none shadow-xl bg-background overflow-hidden">
           <div className="h-48 bg-primary/10 relative flex items-center justify-center border-b border-dashed">
             <div className="text-center space-y-2 px-6">
               <div className="mx-auto w-16 h-16 rounded-full bg-primary flex items-center justify-center shadow-lg mb-4">
@@ -171,14 +175,21 @@ export default function CreateTripPage() {
                   />
                 </div>
 
-                <div className="flex items-center justify-between p-4 rounded-xl border bg-muted/20">
-                  <div className="space-y-0.5">
-                    <Label htmlFor="public" className="text-base font-semibold">
-                      Public Itinerary
-                    </Label>
-                    <p className="text-sm text-muted-foreground">Allow others to view and get inspired by your plan.</p>
-                  </div>
-                  <Switch id="public" checked={isPublic} onCheckedChange={setIsPublic} />
+                <div className="space-y-2">
+                  <Label htmlFor="budget" className="text-base font-semibold">
+                    Budget (Optional)
+                  </Label>
+                  <Input
+                    id="budget"
+                    type="number"
+                    placeholder="e.g., 5000"
+                    className="h-12"
+                    value={budget}
+                    onChange={(e) => setBudget(e.target.value)}
+                    min="0"
+                    step="0.01"
+                  />
+                  <p className="text-xs text-muted-foreground">Set your budget in USD.</p>
                 </div>
               </div>
 
@@ -209,6 +220,7 @@ export default function CreateTripPage() {
             </p>
           </CardFooter>
         </Card>
+        </div>
       </main>
     </div>
   )

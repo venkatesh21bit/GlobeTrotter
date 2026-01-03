@@ -11,7 +11,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { getCurrentUser, logoutUser } from "@/lib/auth/mock-auth"
+import { getCurrentUser } from "@/lib/data/queries"
+import { authApi } from "@/lib/api"
 import { useState, useEffect } from "react"
 import type { User as UserType } from "@/lib/types/database"
 
@@ -20,11 +21,15 @@ export function Navbar() {
   const [user, setUser] = useState<UserType | null>(null)
 
   useEffect(() => {
-    setUser(getCurrentUser())
+    const fetchUser = async () => {
+      const currentUser = await getCurrentUser()
+      setUser(currentUser)
+    }
+    fetchUser()
   }, [])
 
   const handleLogout = () => {
-    logoutUser()
+    authApi.logout()
     window.location.href = "/login"
   }
 
@@ -65,6 +70,32 @@ export function Navbar() {
             >
               Explore
             </Link>
+            <Link
+              href="/explore/cities"
+              className={`text-sm font-medium transition-colors hover:text-primary ${
+                pathname === "/explore/cities" ? "text-primary" : "text-muted-foreground"
+              }`}
+            >
+              Cities
+            </Link>
+            <Link
+              href="/explore/trips"
+              className={`text-sm font-medium transition-colors hover:text-primary ${
+                pathname === "/explore/trips" ? "text-primary" : "text-muted-foreground"
+              }`}
+            >
+              Public Trips
+            </Link>
+            {user?.role === "ADMIN" && (
+              <Link
+                href="/admin"
+                className={`text-sm font-medium transition-colors hover:text-primary ${
+                  pathname === "/admin" ? "text-primary" : "text-muted-foreground"
+                }`}
+              >
+                Admin
+              </Link>
+            )}
           </nav>
         </div>
 
@@ -72,11 +103,11 @@ export function Navbar() {
           {user ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className="relative h-8 w-8 rounded-full">
+                <Button variant="ghost" className="relative h-10 w-10 rounded-full bg-muted hover:bg-muted/80 p-0.5">
                   <img
                     src={user.avatar || "/placeholder.svg?height=32&width=32"}
                     alt={user.name}
-                    className="h-8 w-8 rounded-full object-cover"
+                    className="h-full w-full rounded-full object-cover ring-2 ring-border"
                   />
                 </Button>
               </DropdownMenuTrigger>
@@ -89,16 +120,28 @@ export function Navbar() {
                 </div>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem asChild>
-                  <Link href="/profile" className="cursor-pointer">
+                  <Link href="/profile" className="cursor-pointer w-full">
                     <User className="mr-2 h-4 w-4" />
                     Profile
                   </Link>
                 </DropdownMenuItem>
                 <DropdownMenuItem asChild>
-                  <Link href="/settings" className="cursor-pointer">
-                    Settings
+                  <Link href="/dashboard" className="cursor-pointer w-full">
+                    Dashboard
                   </Link>
                 </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link href="/trips" className="cursor-pointer w-full">
+                    My Trips
+                  </Link>
+                </DropdownMenuItem>
+                {user?.role === "ADMIN" && (
+                  <DropdownMenuItem asChild>
+                    <Link href="/admin" className="cursor-pointer w-full">
+                      Admin Panel
+                    </Link>
+                  </DropdownMenuItem>
+                )}
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={handleLogout} className="cursor-pointer text-destructive">
                   <LogOut className="mr-2 h-4 w-4" />

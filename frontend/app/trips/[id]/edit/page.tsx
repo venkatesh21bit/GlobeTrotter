@@ -4,15 +4,14 @@ import type React from "react"
 
 import { useState, useEffect } from "react"
 import { useParams, useRouter } from "next/navigation"
-import { Calendar, Camera, Loader2, ArrowLeft, Check, Trash2, Info } from "lucide-react"
+import { Calendar, Loader2, ArrowLeft, Check, Trash2, Info } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent, CardFooter, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
-import { Switch } from "@/components/ui/switch"
 import { Navbar } from "@/components/navbar"
-import { getTripWithDetails, deleteTrip } from "@/lib/data/queries"
+import { tripsApi } from "@/lib/api"
 import { useToast } from "@/hooks/use-toast"
 import type { Trip } from "@/lib/types/database"
 
@@ -23,7 +22,7 @@ export default function EditTripPage() {
   const [description, setDescription] = useState("")
   const [startDate, setStartDate] = useState("")
   const [endDate, setEndDate] = useState("")
-  const [isPublic, setIsPublic] = useState(false)
+  const [budget, setBudget] = useState("")
   const [isLoading, setIsLoading] = useState(true)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const router = useRouter()
@@ -31,23 +30,34 @@ export default function EditTripPage() {
 
   useEffect(() => {
     const fetchTrip = async () => {
-      const data = await getTripWithDetails(id)
-      if (!data) {
+      try {
+        const data = await tripsApi.getById(id)
+        if (!data) {
+          toast({
+            title: "Trip not found",
+            description: "The trip you're looking for doesn't exist.",
+            variant: "destructive",
+          })
+          router.push("/dashboard")
+          return
+        }
+        setTrip(data)
+        setName(data.name)
+        setDescription(data.description || "")
+        // Convert ISO date strings to YYYY-MM-DD format for input fields
+        setStartDate(data.startDate ? new Date(data.startDate).toISOString().split('T')[0] : "")
+        setEndDate(data.endDate ? new Date(data.endDate).toISOString().split('T')[0] : "")
+        setBudget(data.budget?.toString() || "")
+        setIsLoading(false)
+      } catch (error) {
+        console.error('Failed to fetch trip:', error)
         toast({
-          title: "Trip not found",
-          description: "The trip you're looking for doesn't exist.",
+          title: "Error",
+          description: "Failed to load trip.",
           variant: "destructive",
         })
         router.push("/dashboard")
-        return
       }
-      setTrip(data)
-      setName(data.name)
-      setDescription(data.description)
-      setStartDate(data.startDate)
-      setEndDate(data.endDate)
-      setIsPublic(data.isPublic)
-      setIsLoading(false)
     }
 
     fetchTrip()
@@ -65,28 +75,47 @@ export default function EditTripPage() {
     }
 
     setIsSubmitting(true)
-    // Simulate update call
-    setTimeout(() => {
-      setIsSubmitting(false)
+    try {
+      await tripsApi.update(id, {
+        name,
+        description,
+        startDate,
+        endDate,
+        budget: budget ? parseFloat(budget) : undefined,
+      })
       toast({
         title: "Trip updated!",
         description: "Your changes have been saved.",
       })
       router.push(`/trips/${id}`)
-    }, 1500)
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update trip.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   const handleDelete = async () => {
     const confirmed = confirm("Are you sure you want to delete this entire trip? This action cannot be undone.")
     if (!confirmed) return
 
-    const success = await deleteTrip(id)
-    if (success) {
+    try {
+      await tripsApi.delete(id)
       toast({
         title: "Trip deleted",
         description: "Your trip has been successfully removed.",
       })
       router.push("/trips")
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to delete trip.",
+        variant: "destructive",
+      })
     }
   }
 
@@ -193,32 +222,21 @@ export default function EditTripPage() {
                   />
                 </div>
 
-                <div className="space-y-4">
-                  <Label className="text-base font-semibold">Privacy & Media</Label>
-                  <div className="flex items-center justify-between p-4 rounded-xl border bg-muted/20">
-                    <div className="space-y-0.5">
-                      <Label htmlFor="public" className="text-base font-semibold">
-                        Public Itinerary
-                      </Label>
-                      <p className="text-sm text-muted-foreground">Allow others to view and copy this plan.</p>
-                    </div>
-                    <Switch id="public" checked={isPublic} onCheckedChange={setIsPublic} />
-                  </div>
-
-                  <div className="p-4 rounded-xl border bg-muted/20 flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
-                        <Camera className="h-5 w-5 text-primary" />
-                      </div>
-                      <div className="space-y-0.5">
-                        <Label className="text-sm font-semibold">Cover Image</Label>
-                        <p className="text-xs text-muted-foreground">Replace your trip's header photo.</p>
-                      </div>
-                    </div>
-                    <Button variant="outline" size="sm" className="bg-transparent border-primary/20 text-primary">
-                      Replace Image
-                    </Button>
-                  </div>
+                <div className="space-y-2">
+                  <Label htmlFor="budget" className="text-base font-semibold">
+                    Budget (Optional)
+                  </Label>
+                  <Input
+                    id="budget"
+                    type="number"
+                    placeholder="e.g., 5000"
+                    className="h-12"
+                    value={budget}
+                    onChange={(e) => setBudget(e.target.value)}
+                    min="0"
+                    step="0.01"
+                  />
+                  <p className="text-xs text-muted-foreground">Set your budget in USD.</p>
                 </div>
               </div>
 

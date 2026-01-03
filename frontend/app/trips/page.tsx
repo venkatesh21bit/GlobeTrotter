@@ -15,8 +15,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Navbar } from "@/components/navbar"
-import { getCurrentUser } from "@/lib/auth/mock-auth"
-import { getTripsByUser, deleteTrip } from "@/lib/data/queries"
+import { getCurrentUser } from "@/lib/data/queries"
+import { tripsApi } from "@/lib/api"
 import { useToast } from "@/hooks/use-toast"
 import type { Trip } from "@/lib/types/database"
 
@@ -29,29 +29,44 @@ function TripsContent() {
 
   useEffect(() => {
     const fetchTrips = async () => {
-      const currentUser = getCurrentUser()
-      if (!currentUser) {
-        router.push("/login")
-        return
+      try {
+        const currentUser = await getCurrentUser()
+        if (!currentUser) {
+          router.push("/login")
+          return
+        }
+        const result = await tripsApi.getAll()
+        setTrips(result.trips)
+      } catch (error) {
+        toast({
+          title: "Error",
+          description: "Failed to load trips. Please try again.",
+          variant: "destructive",
+        })
+      } finally {
+        setIsLoading(false)
       }
-      const userTrips = await getTripsByUser(currentUser.id)
-      setTrips(userTrips)
-      setIsLoading(false)
     }
 
     fetchTrips()
-  }, [router])
+  }, [router, toast])
 
   const handleDeleteTrip = async (tripId: string) => {
     const confirmed = confirm("Are you sure you want to delete this trip? This action cannot be undone.")
     if (!confirmed) return
 
-    const success = await deleteTrip(tripId)
-    if (success) {
+    try {
+      await tripsApi.delete(tripId)
       setTrips(trips.filter((t) => t.id !== tripId))
       toast({
         title: "Trip deleted",
         description: "Your trip has been successfully removed.",
+      })
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to delete trip. Please try again.",
+        variant: "destructive",
       })
     }
   }
@@ -109,7 +124,18 @@ function TripsContent() {
                   className="object-cover w-full h-full transition-transform duration-500 group-hover:scale-105"
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent" />
-                <div className="absolute top-2 right-2">
+                <div className="absolute top-2 right-2 flex gap-2">
+                  <div
+                    className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase ${
+                      trip.status === 'completed' 
+                        ? "bg-green-500/20 text-green-300 border border-green-400/30" 
+                        : trip.status === 'confirmed'
+                        ? "bg-blue-500/20 text-blue-300 border border-blue-400/30"
+                        : "bg-yellow-500/20 text-yellow-300 border border-yellow-400/30"
+                    }`}
+                  >
+                    {trip.status}
+                  </div>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <Button
@@ -148,15 +174,14 @@ function TripsContent() {
               <CardHeader className="p-4 pb-2">
                 <div className="flex justify-between items-start">
                   <CardTitle className="text-xl">{trip.name}</CardTitle>
-                  <div
-                    className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${trip.isPublic ? "bg-secondary/20 text-secondary" : "bg-muted text-muted-foreground"}`}
-                  >
-                    {trip.isPublic ? "Public" : "Private"}
-                  </div>
                 </div>
                 <CardDescription className="flex items-center gap-1 mt-1">
                   <Calendar className="h-3 w-3" />
-                  {new Date(trip.startDate).toLocaleDateString()} - {new Date(trip.endDate).toLocaleDateString()}
+                  {trip.startDate && trip.endDate ? (
+                    `${new Date(trip.startDate).toLocaleDateString()} - ${new Date(trip.endDate).toLocaleDateString()}`
+                  ) : (
+                    'Dates not set'
+                  )}
                 </CardDescription>
               </CardHeader>
               <CardContent className="p-4 pt-0">

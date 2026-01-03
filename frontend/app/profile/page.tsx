@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Navbar } from "@/components/navbar"
-import { getCurrentUser } from "@/lib/auth/mock-auth"
+import { authApi } from "@/lib/api"
 import { useToast } from "@/hooks/use-toast"
 import type { User as UserType } from "@/lib/types/database"
 
@@ -21,14 +21,27 @@ export default function ProfilePage() {
   const { toast } = useToast()
 
   useEffect(() => {
-    const currentUser = getCurrentUser()
-    if (!currentUser) {
-      router.push("/login")
-      return
+    const fetchUser = async () => {
+      try {
+        const response = await authApi.getProfile()
+        console.log('Profile response:', response)
+        // API returns { user: {...} } so we need to extract the user
+        const userData = response.user || response
+        setUser(userData)
+      } catch (error) {
+        console.error('Failed to fetch user:', error)
+        toast({
+          title: "Error",
+          description: "Failed to load profile. Please login again.",
+          variant: "destructive",
+        })
+        router.push("/login")
+      } finally {
+        setIsLoading(false)
+      }
     }
-    setUser(currentUser)
-    setIsLoading(false)
-  }, [router])
+    fetchUser()
+  }, [router, toast])
 
   const handleSave = () => {
     setIsSaving(true)
@@ -44,18 +57,18 @@ export default function ProfilePage() {
   if (isLoading || !user) return null
 
   return (
-    <div className="flex min-h-screen flex-col bg-muted/30">
+    <div className="flex min-h-screen flex-col bg-background">
       <Navbar />
       <main className="container max-w-4xl py-12 px-4 md:px-6">
         <div className="space-y-8">
           <div>
-            <h1 className="text-3xl font-bold font-serif text-primary">Account Settings</h1>
+            <h1 className="text-3xl font-bold font-serif text-foreground">Account Settings</h1>
             <p className="text-muted-foreground">Manage your profile and travel preferences.</p>
           </div>
 
           <div className="grid gap-8 md:grid-cols-12">
             <div className="md:col-span-4 space-y-6">
-              <Card className="border-none shadow-md overflow-hidden">
+              <Card className="border shadow-md overflow-hidden bg-card">
                 <div className="h-24 bg-primary" />
                 <CardContent className="pt-0 flex flex-col items-center -mt-12">
                   <div className="relative group">
@@ -68,23 +81,23 @@ export default function ProfilePage() {
                       <Camera className="text-white h-6 w-6" />
                     </button>
                   </div>
-                  <h3 className="mt-4 font-bold text-lg">{user.name}</h3>
+                  <h3 className="mt-4 font-bold text-lg text-foreground">{user.name}</h3>
                   <p className="text-xs text-muted-foreground">{user.email}</p>
                 </CardContent>
               </Card>
 
               <nav className="space-y-1">
-                <Button variant="ghost" className="w-full justify-start text-primary bg-primary/5 font-bold">
+                <Button variant="ghost" className="w-full justify-start text-primary bg-primary/10 font-bold hover:bg-primary/20">
                   <User className="mr-2 h-4 w-4" />
                   General
                 </Button>
-                <Button variant="ghost" className="w-full justify-start">
+                <Button variant="ghost" className="w-full justify-start text-foreground hover:bg-accent hover:text-accent-foreground">
                   <Shield className="mr-2 h-4 w-4" />
                   Privacy & Security
                 </Button>
                 <Button
                   variant="ghost"
-                  className="w-full justify-start text-destructive hover:text-destructive hover:bg-destructive/5"
+                  className="w-full justify-start text-destructive hover:text-destructive hover:bg-destructive/10"
                 >
                   <Trash2 className="mr-2 h-4 w-4" />
                   Delete Account

@@ -7,8 +7,8 @@ import { Plus, Calendar, MapPin, TrendingUp, Compass, ArrowRight, Loader2 } from
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card"
 import { Navbar } from "@/components/navbar"
-import { getCurrentUser } from "@/lib/auth/mock-auth"
-import { getTripsByUser, getAllCities } from "@/lib/data/queries"
+import { getCurrentUser, getPopularCities } from "@/lib/data/queries"
+import { tripsApi } from "@/lib/api"
 import type { User, Trip, City } from "@/lib/types/database"
 
 export default function DashboardPage() {
@@ -20,16 +20,19 @@ export default function DashboardPage() {
 
   useEffect(() => {
     const fetchDashboardData = async () => {
-      const currentUser = getCurrentUser()
+      const currentUser = await getCurrentUser()
       if (!currentUser) {
         router.push("/login")
         return
       }
       setUser(currentUser)
 
-      const [userTrips, cities] = await Promise.all([getTripsByUser(currentUser.id), getAllCities()])
+      const [tripsResult, cities] = await Promise.all([
+        tripsApi.getAll().catch(() => ({ trips: [], total: 0, page: 1, limit: 10 })),
+        getPopularCities().catch(() => [])
+      ])
 
-      setTrips(userTrips)
+      setTrips(tripsResult.trips)
       setRecommendedCities(cities.slice(0, 3))
       setIsLoading(false)
     }
@@ -90,7 +93,7 @@ export default function DashboardPage() {
                       >
                         <div className="relative h-48 w-full overflow-hidden">
                           <img
-                            src={trip.coverImageUrl || "/placeholder.svg?height=200&width=400"}
+                            src="/placeholder.svg?height=200&width=400"
                             alt={trip.name}
                             className="object-cover w-full h-full transition-transform duration-500 group-hover:scale-105"
                           />
@@ -98,15 +101,18 @@ export default function DashboardPage() {
                           <div className="absolute bottom-4 left-4 text-white">
                             <h3 className="font-bold text-lg">{trip.name}</h3>
                             <p className="text-sm opacity-90">
-                              {new Date(trip.startDate).toLocaleDateString()} -{" "}
-                              {new Date(trip.endDate).toLocaleDateString()}
+                              {trip.startDate && trip.endDate ? (
+                                `${new Date(trip.startDate).toLocaleDateString()} - ${new Date(trip.endDate).toLocaleDateString()}`
+                              ) : (
+                                'Dates not set'
+                              )}
                             </p>
                           </div>
                         </div>
                         <CardContent className="p-4 bg-background">
                           <div className="flex items-center text-sm text-muted-foreground mb-4">
                             <MapPin className="mr-1 h-4 w-4" />
-                            <span>{trip.description.substring(0, 60)}...</span>
+                            <span>{(trip.description || "").substring(0, 60)}...</span>
                           </div>
                           <Button variant="outline" className="w-full bg-transparent" asChild>
                             <Link href={`/trips/${trip.id}`}>Manage Itinerary</Link>
@@ -213,15 +219,27 @@ export default function DashboardPage() {
                 </CardHeader>
                 <CardContent className="grid gap-2">
                   <Button variant="outline" className="justify-start bg-transparent" asChild>
-                    <Link href="/explore">
-                      <Compass className="mr-2 h-4 w-4 text-primary" />
-                      Browse Activities
+                    <Link href="/trips">
+                      <Calendar className="mr-2 h-4 w-4 text-primary" />
+                      My Trips
                     </Link>
                   </Button>
                   <Button variant="outline" className="justify-start bg-transparent" asChild>
-                    <Link href="/profile/saved">
+                    <Link href="/explore">
+                      <Compass className="mr-2 h-4 w-4 text-primary" />
+                      Explore Activities
+                    </Link>
+                  </Button>
+                  <Button variant="outline" className="justify-start bg-transparent" asChild>
+                    <Link href="/explore/cities">
+                      <MapPin className="mr-2 h-4 w-4 text-primary" />
+                      Browse Cities
+                    </Link>
+                  </Button>
+                  <Button variant="outline" className="justify-start bg-transparent" asChild>
+                    <Link href="/profile">
                       <TrendingUp className="mr-2 h-4 w-4 text-primary" />
-                      Saved Destinations
+                      My Profile
                     </Link>
                   </Button>
                 </CardContent>

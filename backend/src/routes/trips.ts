@@ -15,7 +15,7 @@ router.put('/:id', (req, res) => tripController.updateTrip(req, res));
 router.delete('/:id', (req, res) => tripController.deleteTrip(req, res));
 
 // Trip activities management
-router.post('/:id/activities', (req, res) => tripController.addActivityToTrip(req, res));
-router.delete('/:id/activities/:activityId', (req, res) => tripController.removeActivityFromTrip(req, res));
+router.post('/:tripId/activities', (req, res) => tripController.addActivityToTrip(req, res));
+router.delete('/:tripId/activities/:activityId', (req, res) => tripController.removeActivityFromTrip(req, res));
 
 export default router;
